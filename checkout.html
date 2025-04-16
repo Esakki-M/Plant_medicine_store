@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout | Esakki's Plant Medicine</title>
+    
+    <!-- Consolidated CDNs -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Payment SDKs (load only when needed) -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
+    <script src="https://js.stripe.com/v3/" defer></script>
+    
+    <!-- External CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/checkout.css">
+    <link rel="stylesheet" href="css/shared-styles.css">
+    <link rel="stylesheet" href="css/order-success.css">
+</head>
+<body>
+    <div id="app">
+        <div v-if="isAppReady">
+            <!-- Navigation (consistent with other pages) -->
+            <nav class="navbar navbar-expand-lg navbar-light sticky-top">
+                <!-- Same as index.html -->
+            </nav>
+
+            <!-- Checkout Section -->
+            <div class="container py-5">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <h2 class="mb-4">Checkout</h2>
+                        
+                        <!-- Shipping Form -->
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title mb-4">Shipping Information</h5>
+                                <form @submit.prevent="validateForm">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="firstName" class="form-label">First Name*</label>
+                                            <input type="text" class="form-control" id="firstName" v-model="shippingInfo.firstName" required 
+                                                   pattern="[A-Za-z ]+" title="Please enter a valid first name">
+                                            <div class="invalid-feedback">Please enter a valid first name</div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="lastName" class="form-label">Last Name*</label>
+                                            <input type="text" class="form-control" id="lastName" v-model="shippingInfo.lastName" required
+                                                   pattern="[A-Za-z ]+" title="Please enter a valid last name">
+                                            <div class="invalid-feedback">Please enter a valid last name</div>
+                                        </div>
+                                        <div class="col-12 mb-3">
+                                            <label for="email" class="form-label">Email Address*</label>
+                                            <input type="email" class="form-control" id="email" v-model="shippingInfo.email" required>
+                                            <div class="invalid-feedback">Please enter a valid email address</div>
+                                        </div>
+                                        <div class="col-12 mb-3">
+                                            <label for="phone" class="form-label">Phone Number*</label>
+                                            <input type="tel" class="form-control" id="phone" v-model="shippingInfo.phone" required
+                                                   pattern="[0-9]{10}" title="Please enter a valid 10-digit phone number">
+                                            <div class="invalid-feedback">Please enter a valid phone number</div>
+                                        </div>
+                                        <div class="col-12 mb-3">
+                                            <label for="address" class="form-label">Street Address*</label>
+                                            <input type="text" class="form-control" id="address" v-model="shippingInfo.address" required>
+                                            <div class="invalid-feedback">Please enter your street address</div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="city" class="form-label">City*</label>
+                                            <input type="text" class="form-control" id="city" v-model="shippingInfo.city" required>
+                                            <div class="invalid-feedback">Please enter your city</div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="pincode" class="form-label">PIN Code*</label>
+                                            <input type="text" class="form-control" id="pincode" v-model="shippingInfo.pincode" required
+                                                   pattern="[0-9]{6}" title="Please enter a valid 6-digit PIN code">
+                                            <div class="invalid-feedback">Please enter a valid PIN code</div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- Payment Method -->
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title mb-4">Payment Method</h5>
+                                
+
+                                <!-- Payment Options -->
+                                <div class="payment-methods">
+                                    <div class="payment-option" 
+                                         v-for="method in paymentMethods" 
+                                         :key="method.id"
+                                         :class="{selected: selectedPayment === method.id}" 
+                                         @click="selectPayment(method.id)">
+                                        <img :src="method.icon" :alt="method.name" class="payment-icon">
+                                        <div class="payment-details">
+                                            <h6 class="mb-0">{{ method.name }}</h6>
+                                            <small class="text-muted">{{ method.description }}</small>
+                                        </div>
+                                        <i class="fas fa-check-circle text-success" v-if="selectedPayment === method.id"></i>
+                                    </div>
+                                </div>
+                                
+
+                                <!-- Dynamic Payment Forms -->
+                                <div v-if="selectedPayment" class="mt-4">
+                                    <!-- Stripe Payment Form -->
+                                    <div v-if="selectedPayment === 'stripe'" class="stripe-form">
+                                        <div id="card-element" class="form-control"></div>
+                                        <div id="card-errors" class="text-danger mt-2"></div>
+                                    </div>
+                                    
+                                    <!-- Razorpay Payment Form -->
+                                    <div v-if="selectedPayment === 'razorpay'" class="razorpay-form">
+                                        <button class="btn btn-primary w-100" @click="initRazorpay">
+                                            Pay with Razorpay
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Cash on Delivery -->
+                                    <div v-if="selectedPayment === 'cod'" class="cod-notice">
+                                        <p class="alert alert-info mb-0">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            Payment will be collected at the time of delivery
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Order Summary -->
+                    <div class="col-lg-4 mt-4 mt-lg-0">
+                        <div class="order-summary">
+                            <!-- Enhanced order summary with loading states -->
+                            <button class="btn btn-primary-custom w-100" 
+                                    @click="placeOrder" 
+                                    :disabled="!isFormValid || processing">
+                                <template v-if="processing">
+                                    <span class="spinner-border spinner-border-sm"></span> Processing...
+                                </template>
+                                <template v-else>Place Order</template>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Consistent Footer -->
+            <footer class="footer">
+                <footer class="footer">
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-md-4 mb-4 mb-md-0">
+                                <h5>Esakki's Plant Medicine</h5>
+                                <p>Providing authentic plant-based remedies since 2008.</p>
+                                <div class="mt-3">
+                                    <img src="https://via.placeholder.com/120x60?text=Payment+Methods" alt="Payment Methods" class="img-fluid">
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-4 mb-md-0">
+                                <h5>Shop</h5>
+                                <ul class="list-unstyled">
+                                    <li><a href="#" class="text-white">All Products</a></li>
+                                    <li><a href="#" class="text-white">New Arrivals</a></li>
+                                    <li><a href="#" class="text-white">Best Sellers</a></li>
+                                    <li><a href="#" class="text-white">Special Offers</a></li>
+                                </ul>
+                            </div>
+                            <div class="col-md-2 mb-4 mb-md-0">
+                                <h5>Information</h5>
+                                <ul class="list-unstyled">
+                                    <li><a href="#" class="text-white">About Us</a></li>
+                                    <li><a href="#" class="text-white">Blog</a></li>
+                                    <li><a href="#" class="text-white">Contact</a></li>
+                                    <li><a href="#" class="text-white">FAQs</a></li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h5>Connect With Us</h5>
+                                <div class="social-icons mb-3">
+                                    <a href="https://www.instagram.com/pillai_magan_x/" class="text-white me-3"><i class="fab fa-instagram"></i></a>
+                                    <a href="https://www.facebook.com/m.esakki.2025/" class="text-white me-3"><i class="fab fa-facebook-f"></i></a>
+                                    <a href="https://x.com/EsakkiM17041" class="text-white me-3"><i class="fab fa-twitter"></i></a>
+                                    <a href="https://github.com/Esakki-M" class="text-white"><i class="fab fa-github"></i></a>
+                                </div>
+                                <div class="mb-3">
+                                    <p><i class="fas fa-phone me-2"></i> +91 9342587007</p>
+                                    <p><i class="fas fa-envelope me-2"></i> mresakkiofficial@gmail.com</p>
+                                    <p><i class="fas fa-map-marker-alt me-2"></i> 26,Vinayagar streed, Alwarkurichi, Tenkasi</p>
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="mt-4 bg-light">
+                        <div class="text-center">
+                            <p class="mb-0">&copy; 2025 Esakki's Plant Medicine. All rights reserved.</p>
+                            <p class="mb-0">Designed by <a href="#" class="text-white">Team Spark-X</a></p>
+                        </div>
+                    </div>
+                </footer>
+            </footer>
+        </div>
+        <div v-else>
+            <div class="loading-spinner text-center">
+                <div class="spinner-border text-success" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Loading checkout page, please wait...</p>
+            </div>
+            <p class="text-danger text-center mt-3">If this message persists, check the console for errors.</p>
+        </div>
+    </div>
+    <script>
+        console.log("HTML loaded. Vue app should mount now.");
+    </script>
+    <!-- JS Files -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.min.js"></script>    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/checkout.js"></script>
+</body>
+</html>
